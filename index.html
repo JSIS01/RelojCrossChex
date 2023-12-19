@@ -5,10 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recuento horas reloj</title>
     <link rel="stylesheet" href="index.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
-<body>
-    <input type="file" id="SubmitExcel"  name=".xlsx">
+<body class="flex place-items-center flex-col my-4">
+    <button id="bg-change" class="absolute hover:opacity-100 opacity-0 bg-indigo-100 rounded-2xl w-2 h-2 right-0 top-0"></button>
+    <div class="flex flex-row place-content-center flex-wrap gap-4">
+      <button id="BotonMensual" class="py-2 hover:bg-purple-700 hover:text-white transition-colors duration-500 bg-white border border-purple-300 rounded-md px-3 text-purple-700 leading-tight cursor-pointer">
+        <h2 class="text-lg font-bold my-auto">Mensual</h2>
+      </button>
+      <button id="BotonSemanal" class="py-2 hover:bg-purple-700 hover:text-white transition-colors duration-500 bg-white border border-purple-300 rounded-md px-3 text-purple-700 leading-tight cursor-pointer">
+        <h2 class="text-lg font-bold my-auto">Semanal</h2>
+      </button>
+    </div>
+
+
+    <div class="flex flex-row place-content-center flex-wrap gap-4" id="TarjetaInfo">
+
+    </div>
+    <div class="my-4">
+        <input
+          hidden
+          type="file"
+          id="SubmitExcel"
+          name=".xlsx"
+        >
+        <label
+          for="SubmitExcel"
+          class=" mt-2 mr-2 bg-white border border-gray-300 rounded-md py-1 px-3 text-gray-700 leading-tight cursor-pointer"
+        >
+          Subir archivo
+        </label>
+      </div>
 </body>
 <script src="index.js"></script>
 </html>
