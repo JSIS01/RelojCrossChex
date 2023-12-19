@@ -7,14 +7,15 @@
     <link rel="stylesheet" href="index.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
 </head>
-<body class="flex place-items-center flex-col my-4">
+<body class="flex min-h-screen place-items-center justify-center flex-col my-4">
     <button id="bg-change" class="absolute hover:opacity-100 opacity-0 bg-indigo-100 rounded-2xl w-2 h-2 right-0 top-0"></button>
     <div class="flex flex-row place-content-center flex-wrap gap-4">
-      <button id="BotonMensual" class="py-2 hover:bg-purple-700 hover:text-white transition-colors duration-500 bg-white border border-purple-300 rounded-md px-3 text-purple-700 leading-tight cursor-pointer">
+      <button id="BotonMensual" class="py-2 hover:bg-indigo-700 hover:text-white transition-colors duration-500 bg-white border border-indigo-300 rounded-md px-3 text-indigo-700 leading-tight cursor-pointer">
         <h2 class="text-lg font-bold my-auto">Mensual</h2>
       </button>
-      <button id="BotonSemanal" class="py-2 hover:bg-purple-700 hover:text-white transition-colors duration-500 bg-white border border-purple-300 rounded-md px-3 text-purple-700 leading-tight cursor-pointer">
+      <button id="BotonSemanal" class="py-2 hover:bg-indigo-700 hover:text-white transition-colors duration-500 bg-white border border-indigo-300 rounded-md px-3 text-indigo-700 leading-tight cursor-pointer">
         <h2 class="text-lg font-bold my-auto">Semanal</h2>
       </button>
     </div>
@@ -24,18 +25,13 @@
 
     </div>
     <div class="my-4">
-        <input
-          hidden
-          type="file"
-          id="SubmitExcel"
-          name=".xlsx"
-        >
-        <label
-          for="SubmitExcel"
-          class=" mt-2 mr-2 bg-white border border-gray-300 rounded-md py-1 px-3 text-gray-700 leading-tight cursor-pointer"
-        >
-          Subir archivo
-        </label>
+        <input hidden type="file" id="SubmitExcel" name=".xlsx">
+        <label for="SubmitExcel" class=" bg-white block text-center border-y border-gray-300 rounded-md py-2 px-4 text-gray-700 leading-tight cursor-pointer">Subir archivo</label>
+        <div>
+          <input id="dropArea" class="mt-3 bg-indigo-500 text-white font-bold h-24 w-56 place-items-center rounded hover:cursor-grabbing flex justify-center text-center" readonly ondragover="handleDragOver(event)" ondrop="handleDrop(event)" value="Arrastre sus archivos">
+          </input>
+        </div>
+
       </div>
 </body>
 <script src="index.js"></script>
