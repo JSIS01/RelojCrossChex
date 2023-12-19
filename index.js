@@ -22,20 +22,15 @@ function handleFile() {
 
 		// Haz lo que quieras con el JSON, por ejemplo, imprímelo en la consola
 		json_data.forEach((fila) => {
-			const number = fila.Time
-			const hours = Math.floor(number * 24)
-			const minutes = Math.round((number * 24 - hours) * 60)
+			let [horas,minutos] = fila.Time.split(":")
 
-			const formattedTime = `${hours
-				.toString()
-				.padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+			const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
 			fila.Time = formattedTime
 
-			const baseDate = new Date("1900-01-01")
-			const targetDate = new Date(
-				baseDate.getTime() + (fila.Date - 2) * 24 * 60 * 60 * 1000
-			)
-			fila.Date = targetDate.toISOString().slice(0, 10)
+			let [day, month, year] = fila.Date.toString().split("/");
+			let FechaFromString = new Date(year, month - 1, day);
+			
+			fila.Date = FechaFromString.toISOString().slice(0, 10)
 		})
 
 		const DatosAgrupadosPorNombre = json_data.reduce(
@@ -117,6 +112,7 @@ function handleFile() {
 			}
 		}
 
+		console.log(DatosAgrupadosPorNombre);
 		PlanillaTrabajadores = DatosAgrupadosPorNombre
 	}
 	// Lee el archivo como un array buffer
