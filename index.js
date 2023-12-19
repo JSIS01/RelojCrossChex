@@ -1,12 +1,10 @@
-document.addEventListener("DOMContentLoaded", function () {
-	document
-		.getElementById("SubmitExcel")
-		.addEventListener("change", handleFile, false)
-})
+const dropArea = document.getElementById('dropArea');
 
 // Función para manejar el archivo cargado
-function handleFile() {
-	const input = document.getElementById("SubmitExcel")
+function handleDrop(event){
+	dropArea.classList.remove('bg-indigo-500')
+	dropArea.classList.add('bg-indigo-800')
+	event.preventDefault();
 
 	const reader = new FileReader()
 	reader.onload = function (e) {
@@ -112,7 +110,131 @@ function handleFile() {
 			}
 		}
 
-		console.log(DatosAgrupadosPorNombre);
+		PlanillaTrabajadores = DatosAgrupadosPorNombre
+	}
+
+	const files = event.dataTransfer.files;
+    if (files.length > 0) {
+		reader.readAsArrayBuffer(files[0])
+    }
+
+}
+
+function handleDragOver(e) {
+	e.preventDefault();
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+	document.getElementById("SubmitExcel").addEventListener("change", handleFile, false)
+})
+
+// Función para manejar el archivo cargado
+function handleFile() {
+	const input = document.getElementById("SubmitExcel")
+	const reader = new FileReader()
+	reader.onload = function (e) {
+		const data = new Uint8Array(e.target.result)
+		const workbook = XLSX.read(data, { type: "array" })
+
+		// Selecciona la primera hoja del archivo Excel
+		const sheet_name_list = workbook.SheetNames
+		const sheet = workbook.Sheets[sheet_name_list[0]]
+
+		// Convierte la hoja a JSON
+		const json_data = XLSX.utils.sheet_to_json(sheet)
+
+		// Haz lo que quieras con el JSON, por ejemplo, imprímelo en la consola
+		json_data.forEach((fila) => {
+			let [horas,minutos] = fila.Time.split(":")
+
+			const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
+			fila.Time = formattedTime
+
+			let [day, month, year] = fila.Date.toString().split("/");
+			let FechaFromString = new Date(year, month - 1, day);
+			
+			fila.Date = FechaFromString.toISOString().slice(0, 10)
+		})
+
+		const DatosAgrupadosPorNombre = json_data.reduce(
+			(acumulador, objeto) => {
+				const nombre = objeto.Name
+				const fecha = objeto.Date
+
+				if (!acumulador[nombre]) {
+					acumulador[nombre] = {}
+				}
+
+				if (!acumulador[nombre][fecha]) {
+					acumulador[nombre][fecha] = []
+				}
+
+				acumulador[nombre][fecha].push(objeto)
+				return acumulador
+			},
+			{}
+		)
+
+		for (let Nombre in DatosAgrupadosPorNombre) {
+			let Persona = DatosAgrupadosPorNombre[Nombre]
+			for (let Fichaje in Persona) {
+				let Fecha = DatosAgrupadosPorNombre[Nombre][Fichaje]
+				let FichajesEnLaFecha = []
+				for (let Dia in Fecha) {
+					FichajesEnLaFecha.push(Fecha[Dia].Time)
+				}
+
+				let MinutosTrabajados = []
+				// Calcula la diferencia de tiempo entre cada fichaje
+				for (
+					let index = 0;
+					index < FichajesEnLaFecha.length;
+					index += 2
+				){
+					let Hora1
+					if (FichajesEnLaFecha[index]) {
+						Hora1 = new Date(
+							`2000-01-01T${FichajesEnLaFecha[index]}`
+						)
+					} else {
+						Hora1 = new Date(`2000-01-01T00:00`)
+					}
+
+					let Hora2
+					if (FichajesEnLaFecha[index + 1]) {
+						Hora2 = new Date(
+							`2000-01-01T${FichajesEnLaFecha[index + 1]}`
+						)
+					} else {
+						Hora2 = isNaN(
+							new Date(
+								`2000-01-01T${FichajesEnLaFecha[index - 1]}`
+							)
+						)
+							? new Date(`2000-01-01T${FichajesEnLaFecha[index]}`)
+							: new Date(
+									`2000-01-01T${FichajesEnLaFecha[index - 1]}`
+							  )
+					}
+
+					const diferenciaMilisegundos =
+						Hora1.getTime() - Hora2.getTime()
+					let diferenciaEnMinutos =
+						diferenciaMilisegundos / (1000 * 60)
+
+					if (diferenciaEnMinutos < 0) {
+						diferenciaEnMinutos = diferenciaEnMinutos * -1
+					}
+
+					MinutosTrabajados.push(diferenciaEnMinutos)
+				}
+
+				MinutosTrabajados = MinutosTrabajados.reduce((a, b) => a + b, 0)
+
+				DatosAgrupadosPorNombre[Nombre][Fichaje].MinutosTrabajados=MinutosTrabajados
+			}
+		}
+
 		PlanillaTrabajadores = DatosAgrupadosPorNombre
 	}
 	// Lee el archivo como un array buffer
@@ -166,7 +288,7 @@ function RellenarFront(PlanillaTrabajadores) {
 		var errores = PlanillaTrabajadores[Nombre].Errores.length > 0
 		html += `
 		<div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
-			<h2 class="text-purple-800 text-lg font-bold mb-2">${Nombre}</h2>
+			<h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
 			${
 				errores
 					? PlanillaTrabajadores[Nombre].Errores.map(
@@ -175,7 +297,7 @@ function RellenarFront(PlanillaTrabajadores) {
 					  ).join("")
 					: `<p class="text-gray-600 mb-4">Fichaje correcto</p>`
 			}
-			<h3 class="bg-gradient-to-l from-purple-700 to-purple-800 text-white py-1 px-2 rounded-lg inline-block text-sm">${
+			<h3 class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm">${
 				resultado.horas
 			} Horas <span class="opacity-50">|</span> ${
 			resultado.minutos
@@ -257,7 +379,7 @@ function RellenarMinutosSemanales(PlanillaTrabajadores) {
 		
 		html += `
 			<div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
-				<h2 class="text-purple-800 text-lg font-bold mb-2">${Nombre}</h2>
+				<h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
 				${
 					Persona.Errores.length > 0
 						? Persona.Errores.map(
@@ -268,7 +390,7 @@ function RellenarMinutosSemanales(PlanillaTrabajadores) {
 				}
 				${
 					Persona.Semana.map((semana) =>
-						`<p class="bg-gradient-to-l from-purple-700 to-purple-800 text-white py-1 px-2 rounded-lg inline-block text-sm" >En la semana ${Persona.Semana.indexOf(semana)+1} ficho <span class="text-white-700"> ${semana.horas} horas | Minutos: ${semana.minutos}</span></p>`
+						`<p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm" >En la semana ${Persona.Semana.indexOf(semana)+1} ficho <span class="text-white-700"> ${semana.horas} horas | Minutos: ${semana.minutos}</span></p>`
 					)
 				}
 			</div>
@@ -292,7 +414,7 @@ document.getElementById("bg-change").addEventListener("click", () => {
 	img.id = "img-bg"
 	img.classList.add("hidden")
 	img.src = "./src/bg.jpg"
-	img.style.position = "absolute"
+	img.style.position = "fixed"
 	img.style.top = "0"
 	img.style.left = "0"
 	img.style.width = "135px"
