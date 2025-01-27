@@ -8,116 +8,106 @@ function handleDrop(event){
 
 	const reader = new FileReader()
 	reader.onload = function (e) {
-		const data = new Uint8Array(e.target.result)
-		const workbook = XLSX.read(data, { type: "array" })
+		try {
+			const data = e.target.result;
+			const workbook = XLSX.read(data, { type: 'binary' });
+			const first_sheet_name = workbook.SheetNames[0];
+			const worksheet = workbook.Sheets[first_sheet_name];
+			const json_data = XLSX.utils.sheet_to_json(worksheet);
 
-		// Selecciona la primera hoja del archivo Excel
-		const sheet_name_list = workbook.SheetNames
-		const sheet = workbook.Sheets[sheet_name_list[0]]
+			if (!json_data || json_data.length === 0) {
+				console.error('No se encontraron datos en el archivo Excel');
+				return;
+			}
 
-		// Convierte la hoja a JSON
-		const json_data = XLSX.utils.sheet_to_json(sheet)
+			json_data.forEach((fila) => {
+				if (!fila || typeof fila.Hora === 'undefined' || typeof fila.Fecha === 'undefined') {
+					console.warn('Fila inválida o sin campo Hora/Fecha:', fila);
+					return;
+				}
 
-		// Haz lo que quieras con el JSON, por ejemplo, imprímelo en la consola
-		json_data.forEach((fila) => {
-			let [horas,minutos] = fila.Time.split(":")
+				try {
+					let [horas, minutos] = fila.Hora.toString().split(":");
+					const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
+					fila.Time = formattedTime
 
-			const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
-			fila.Time = formattedTime
+					let [day, month, year] = fila.Fecha.toString().split("/");
+					let FechaFromString = new Date(year, month - 1, day);
+					
+					fila.Date = FechaFromString.toISOString().slice(0, 10)
+				} catch (error) {
+					console.error('Error procesando fila:', fila, error);
+				}
+			})
 
-			let [day, month, year] = fila.Date.toString().split("/");
-			let FechaFromString = new Date(year, month - 1, day);
-			
-			fila.Date = FechaFromString.toISOString().slice(0, 10)
-		})
-
-		const DatosAgrupadosPorNombre = json_data.reduce(
-			(acumulador, objeto) => {
-				const nombre = objeto.Name
-				const fecha = objeto.Date
+			const DatosAgrupadosPorNombre = json_data.reduce((acumulador, objeto) => {
+				const nombre = objeto.Nombre;
+				const fecha = objeto.Date;
 
 				if (!acumulador[nombre]) {
-					acumulador[nombre] = {}
+					acumulador[nombre] = {};
 				}
 
 				if (!acumulador[nombre][fecha]) {
-					acumulador[nombre][fecha] = []
+					acumulador[nombre][fecha] = [];
 				}
 
-				acumulador[nombre][fecha].push(objeto)
-				return acumulador
-			},
-			{}
-		)
+				// Ordenamos las horas de manera ascendente
+				acumulador[nombre][fecha].push(objeto);
+				acumulador[nombre][fecha].sort((a, b) => {
+					return a.Time.localeCompare(b.Time);
+				});
 
-		for (let Nombre in DatosAgrupadosPorNombre) {
-			let Persona = DatosAgrupadosPorNombre[Nombre]
-			for (let Fichaje in Persona) {
-				let Fecha = DatosAgrupadosPorNombre[Nombre][Fichaje]
-				let FichajesEnLaFecha = []
-				for (let Dia in Fecha) {
-					FichajesEnLaFecha.push(Fecha[Dia].Time)
+				return acumulador;
+			}, {});
+
+			for (let Nombre in DatosAgrupadosPorNombre) {
+				let Persona = DatosAgrupadosPorNombre[Nombre];
+				let totalMinutosPorPersona = 0;
+
+				for (let Fecha in Persona) {
+					let registros = Persona[Fecha];
+					let MinutosTrabajados = 0;
+
+					// Procesamos los registros en pares (entrada/salida)
+					for (let i = 0; i < registros.length - 1; i += 2) {
+						const entrada = new Date(`2000-01-01T${registros[i].Time}`);
+						const salida = new Date(`2000-01-01T${registros[i + 1]?.Time || registros[i].Time}`);
+						
+						const diferencia = salida.getTime() - entrada.getTime();
+						const minutos = diferencia / (1000 * 60);
+						
+						if (minutos > 0) {
+							MinutosTrabajados += minutos;
+						}
+					}
+
+					// Guardamos los minutos trabajados en el día
+					DatosAgrupadosPorNombre[Nombre][Fecha] = {
+						registros: registros,
+						MinutosTrabajados: MinutosTrabajados,
+						HorasTrabajadas: Math.floor(MinutosTrabajados / 60),
+						MinutosRestantes: Math.round(MinutosTrabajados % 60)
+					};
+
+					totalMinutosPorPersona += MinutosTrabajados;
 				}
 
-				let MinutosTrabajados = []
-				// Calcula la diferencia de tiempo entre cada fichaje
-				for (
-					let index = 0;
-					index < FichajesEnLaFecha.length;
-					index += 2
-				){
-					let Hora1
-					if (FichajesEnLaFecha[index]) {
-						Hora1 = new Date(
-							`2000-01-01T${FichajesEnLaFecha[index]}`
-						)
-					} else {
-						Hora1 = new Date(`2000-01-01T00:00`)
-					}
-
-					let Hora2
-					if (FichajesEnLaFecha[index + 1]) {
-						Hora2 = new Date(
-							`2000-01-01T${FichajesEnLaFecha[index + 1]}`
-						)
-					} else {
-						Hora2 = isNaN(
-							new Date(
-								`2000-01-01T${FichajesEnLaFecha[index - 1]}`
-							)
-						)
-							? new Date(`2000-01-01T${FichajesEnLaFecha[index]}`)
-							: new Date(
-									`2000-01-01T${FichajesEnLaFecha[index - 1]}`
-							  )
-					}
-
-					const diferenciaMilisegundos =
-						Hora1.getTime() - Hora2.getTime()
-					let diferenciaEnMinutos =
-						diferenciaMilisegundos / (1000 * 60)
-
-					if (diferenciaEnMinutos < 0) {
-						diferenciaEnMinutos = diferenciaEnMinutos * -1
-					}
-
-					MinutosTrabajados.push(diferenciaEnMinutos)
-				}
-
-				MinutosTrabajados = MinutosTrabajados.reduce((a, b) => a + b, 0)
-
-				DatosAgrupadosPorNombre[Nombre][Fichaje].MinutosTrabajados=MinutosTrabajados
+				// Agregamos el total de horas por persona
+				DatosAgrupadosPorNombre[Nombre].TotalHoras = Math.floor(totalMinutosPorPersona / 60);
+				DatosAgrupadosPorNombre[Nombre].TotalMinutos = Math.round(totalMinutosPorPersona % 60);
 			}
-		}
 
-		PlanillaTrabajadores = DatosAgrupadosPorNombre
+			PlanillaTrabajadores = DatosAgrupadosPorNombre
+		} catch (error) {
+			console.error('Error procesando el archivo:', error);
+		}
 	}
 
 	const files = event.dataTransfer.files;
     if (files.length > 0) {
 		reader.readAsArrayBuffer(files[0])
     }
-
 }
 
 function handleDragOver(e) {
@@ -133,109 +123,100 @@ function handleFile() {
 	const input = document.getElementById("SubmitExcel")
 	const reader = new FileReader()
 	reader.onload = function (e) {
-		const data = new Uint8Array(e.target.result)
-		const workbook = XLSX.read(data, { type: "array" })
+		try {
+			const data = e.target.result;
+			const workbook = XLSX.read(data, { type: 'binary' });
+			const first_sheet_name = workbook.SheetNames[0];
+			const worksheet = workbook.Sheets[first_sheet_name];
+			const json_data = XLSX.utils.sheet_to_json(worksheet);
 
-		// Selecciona la primera hoja del archivo Excel
-		const sheet_name_list = workbook.SheetNames
-		const sheet = workbook.Sheets[sheet_name_list[0]]
+			if (!json_data || json_data.length === 0) {
+				console.error('No se encontraron datos en el archivo Excel');
+				return;
+			}
 
-		// Convierte la hoja a JSON
-		const json_data = XLSX.utils.sheet_to_json(sheet)
+			json_data.forEach((fila) => {
+				if (!fila || typeof fila.Hora === 'undefined' || typeof fila.Fecha === 'undefined') {
+					console.warn('Fila inválida o sin campo Hora/Fecha:', fila);
+					return;
+				}
 
-		// Haz lo que quieras con el JSON, por ejemplo, imprímelo en la consola
-		json_data.forEach((fila) => {
-			let [horas,minutos] = fila.Time.split(":")
+				try {
+					let [horas, minutos] = fila.Hora.toString().split(":");
+					const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
+					fila.Time = formattedTime
 
-			const formattedTime = `${horas.padStart(2, "0")}:${minutos.padStart(2, "0")}`
-			fila.Time = formattedTime
+					let [day, month, year] = fila.Fecha.toString().split("/");
+					let FechaFromString = new Date(year, month - 1, day);
+					
+					fila.Date = FechaFromString.toISOString().slice(0, 10)
+				} catch (error) {
+					console.error('Error procesando fila:', fila, error);
+				}
+			})
 
-			let [day, month, year] = fila.Date.toString().split("/");
-			let FechaFromString = new Date(year, month - 1, day);
-			
-			fila.Date = FechaFromString.toISOString().slice(0, 10)
-		})
-
-		const DatosAgrupadosPorNombre = json_data.reduce(
-			(acumulador, objeto) => {
-				const nombre = objeto.Name
-				const fecha = objeto.Date
+			const DatosAgrupadosPorNombre = json_data.reduce((acumulador, objeto) => {
+				const nombre = objeto.Nombre;
+				const fecha = objeto.Date;
 
 				if (!acumulador[nombre]) {
-					acumulador[nombre] = {}
+					acumulador[nombre] = {};
 				}
 
 				if (!acumulador[nombre][fecha]) {
-					acumulador[nombre][fecha] = []
+					acumulador[nombre][fecha] = [];
 				}
 
-				acumulador[nombre][fecha].push(objeto)
-				return acumulador
-			},
-			{}
-		)
+				// Ordenamos las horas de manera ascendente
+				acumulador[nombre][fecha].push(objeto);
+				acumulador[nombre][fecha].sort((a, b) => {
+					return a.Time.localeCompare(b.Time);
+				});
 
-		for (let Nombre in DatosAgrupadosPorNombre) {
-			let Persona = DatosAgrupadosPorNombre[Nombre]
-			for (let Fichaje in Persona) {
-				let Fecha = DatosAgrupadosPorNombre[Nombre][Fichaje]
-				let FichajesEnLaFecha = []
-				for (let Dia in Fecha) {
-					FichajesEnLaFecha.push(Fecha[Dia].Time)
+				return acumulador;
+			}, {});
+
+			for (let Nombre in DatosAgrupadosPorNombre) {
+				let Persona = DatosAgrupadosPorNombre[Nombre];
+				let totalMinutosPorPersona = 0;
+
+				for (let Fecha in Persona) {
+					let registros = Persona[Fecha];
+					let MinutosTrabajados = 0;
+
+					// Procesamos los registros en pares (entrada/salida)
+					for (let i = 0; i < registros.length - 1; i += 2) {
+						const entrada = new Date(`2000-01-01T${registros[i].Time}`);
+						const salida = new Date(`2000-01-01T${registros[i + 1]?.Time || registros[i].Time}`);
+						
+						const diferencia = salida.getTime() - entrada.getTime();
+						const minutos = diferencia / (1000 * 60);
+						
+						if (minutos > 0) {
+							MinutosTrabajados += minutos;
+						}
+					}
+
+					// Guardamos los minutos trabajados en el día
+					DatosAgrupadosPorNombre[Nombre][Fecha] = {
+						registros: registros,
+						MinutosTrabajados: MinutosTrabajados,
+						HorasTrabajadas: Math.floor(MinutosTrabajados / 60),
+						MinutosRestantes: Math.round(MinutosTrabajados % 60)
+					};
+
+					totalMinutosPorPersona += MinutosTrabajados;
 				}
 
-				let MinutosTrabajados = []
-				// Calcula la diferencia de tiempo entre cada fichaje
-				for (
-					let index = 0;
-					index < FichajesEnLaFecha.length;
-					index += 2
-				){
-					let Hora1
-					if (FichajesEnLaFecha[index]) {
-						Hora1 = new Date(
-							`2000-01-01T${FichajesEnLaFecha[index]}`
-						)
-					} else {
-						Hora1 = new Date(`2000-01-01T00:00`)
-					}
-
-					let Hora2
-					if (FichajesEnLaFecha[index + 1]) {
-						Hora2 = new Date(
-							`2000-01-01T${FichajesEnLaFecha[index + 1]}`
-						)
-					} else {
-						Hora2 = isNaN(
-							new Date(
-								`2000-01-01T${FichajesEnLaFecha[index - 1]}`
-							)
-						)
-							? new Date(`2000-01-01T${FichajesEnLaFecha[index]}`)
-							: new Date(
-									`2000-01-01T${FichajesEnLaFecha[index - 1]}`
-							  )
-					}
-
-					const diferenciaMilisegundos =
-						Hora1.getTime() - Hora2.getTime()
-					let diferenciaEnMinutos =
-						diferenciaMilisegundos / (1000 * 60)
-
-					if (diferenciaEnMinutos < 0) {
-						diferenciaEnMinutos = diferenciaEnMinutos * -1
-					}
-
-					MinutosTrabajados.push(diferenciaEnMinutos)
-				}
-
-				MinutosTrabajados = MinutosTrabajados.reduce((a, b) => a + b, 0)
-
-				DatosAgrupadosPorNombre[Nombre][Fichaje].MinutosTrabajados=MinutosTrabajados
+				// Agregamos el total de horas por persona
+				DatosAgrupadosPorNombre[Nombre].TotalHoras = Math.floor(totalMinutosPorPersona / 60);
+				DatosAgrupadosPorNombre[Nombre].TotalMinutos = Math.round(totalMinutosPorPersona % 60);
 			}
-		}
 
-		PlanillaTrabajadores = DatosAgrupadosPorNombre
+			PlanillaTrabajadores = DatosAgrupadosPorNombre
+		} catch (error) {
+			console.error('Error procesando el archivo:', error);
+		}
 	}
 	// Lee el archivo como un array buffer
 	reader.readAsArrayBuffer(input.files[0])
@@ -243,171 +224,72 @@ function handleFile() {
 
 let PlanillaTrabajadores;
 
+function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
+    const contenedor = document.getElementById('TarjetaInfo');
+    let html = "";
+
+    for (let Nombre in DatosAgrupadosPorNombre) {
+        let Persona = DatosAgrupadosPorNombre[Nombre];
+        let diasConFaltaFichada = [];
+        let totalMinutos = 0;
+
+        for (let Fecha in Persona) {
+            if (Fecha === 'TotalHoras' || Fecha === 'TotalMinutos') continue;
+            
+            const registros = Persona[Fecha].registros;
+            if (registros.length % 2 !== 0) {
+                diasConFaltaFichada.push(Fecha);
+            }
+            totalMinutos += Persona[Fecha].MinutosTrabajados;
+        }
+
+        const horasTotales = Math.floor(totalMinutos / 60);
+        const minutosTotales = Math.round(totalMinutos % 60);
+
+        html += `
+            <div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
+                <h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
+                <p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm mb-2">
+                    Total: ${horasTotales}h ${minutosTotales}m
+                </p>
+                ${
+                    diasConFaltaFichada.length > 0
+                        ? `<div class="mt-2">
+                            <p class="text-red-600 font-semibold">Días con fichadas faltantes:</p>
+                            ${diasConFaltaFichada.map(fecha => 
+                                `<p class="text-red-600">${formatearFecha(fecha)}</p>`
+                            ).join('')}
+                           </div>`
+                        : '<p class="text-green-600 mt-2">Todos los fichajes completos</p>'
+                }
+            </div>
+        `;
+    }
+
+    contenedor.innerHTML = html;
+}
+
+function formatearFecha(fecha) {
+    const [year, month, day] = fecha.split('-');
+    return `${day}/${month}/${year}`;
+}
+
+// Modificar los event listeners existentes
 document.getElementById("BotonMensual").addEventListener("click", () => {
-	if (PlanillaTrabajadores == undefined) {
-		alert("El archivo no tiene fichajes")
-		return
-	} else {
-		CalcularMinutosTotales(PlanillaTrabajadores)
-	}
-})
-
-function CalcularMinutosTotales(PlanillaTrabajadores_) {
-	for (let Nombre in PlanillaTrabajadores_) {
-		let TotalMinutosTrabajados = 0
-		let Persona = PlanillaTrabajadores_[Nombre]
-		let Errores = []
-		for (let Fichaje in Persona) {
-			if(Fichaje=="Errores"||Fichaje=="Semana"||Fichaje=="TotalMinutosTrabajados"){
-				continue
-			}
-			let FichajeEnLaFecha = Persona[Fichaje]
-			if (FichajeEnLaFecha.MinutosTrabajados == 0) {
-				Errores.push(Persona[Fichaje][0].Date)
-			}
-			TotalMinutosTrabajados += FichajeEnLaFecha.MinutosTrabajados
-		}
-		Persona.Errores = Errores
-		Persona.TotalMinutosTrabajados = TotalMinutosTrabajados
-	}
-	RellenarFront(PlanillaTrabajadores_)
-}
-
-function RellenarFront(PlanillaTrabajadores) {
-	let html = ""
-	function convertirMinutosAHorasYMinutos(minutos) {
-		var horas = Math.floor(minutos / 60)
-		var minutosRestantes = minutos % 60
-		return { horas: horas, minutos: minutosRestantes }
-	}
-
-	for (let Nombre in PlanillaTrabajadores) {
-		var resultado = convertirMinutosAHorasYMinutos(
-			PlanillaTrabajadores[Nombre].TotalMinutosTrabajados
-		)
-		var errores = PlanillaTrabajadores[Nombre].Errores.length > 0
-		html += `
-		<div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
-			<h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
-			${
-				errores
-					? PlanillaTrabajadores[Nombre].Errores.map(
-							(element) =>
-								`<p class="text-red-600 mb-4">${element}</p>`
-					  ).join("")
-					: `<p class="text-gray-600 mb-4">Fichaje correcto</p>`
-			}
-			<h3 class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm">${
-				resultado.horas
-			} Horas <span class="opacity-50">|</span> ${
-			resultado.minutos
-		} Minutos</h3>
-		</div>
-		`
-	}
-
-	document.getElementById("TarjetaInfo").innerHTML = html
-}
-
-//#region Semanales
+    if (!PlanillaTrabajadores) {
+        alert("El archivo no tiene fichajes");
+        return;
+    }
+    mostrarResumenEnTarjetas(PlanillaTrabajadores);
+});
 
 document.getElementById("BotonSemanal").addEventListener("click", () => {
-	if (PlanillaTrabajadores == undefined) {
-		alert("El archivo no tiene fichajes")
-		return
-	} else {
-		CalcularMinutosSemanales(PlanillaTrabajadores)
-	}
-})
-
-function CalcularMinutosSemanales(PlanillaTrabajadores) {
-	for (let Nombre in PlanillaTrabajadores) {
-		let Persona = PlanillaTrabajadores[Nombre]
-		//Fichajes dividos por dia de la semana
-		let Semana = []
-		//Errores de fichaje
-		let Errores = []
-
-		//Contador de dias de la semana
-		let Contador =0
-		//Numero de semana en el mes
-		let NumeroDeSemana=0
-
-		//Recorrer todos los fichajes de la persona
-		for (let Fichaje in Persona) {
-			if(Fichaje=="Errores"||Fichaje=="Semana"||Fichaje=="TotalMinutosTrabajados"){
-				continue
-			}
-
-			if(Contador==0){
-				Semana[NumeroDeSemana] = 0
-			}
-			//Fichaje en x fecha
-			let FichajeEnLaFecha = Persona[Fichaje]
-			//Si olvido fichar
-			if(FichajeEnLaFecha.MinutosTrabajados==0){
-				Errores.push(Persona[Fichaje][0].Date)
-			}
-
-			Semana[NumeroDeSemana]+=FichajeEnLaFecha.MinutosTrabajados
-			Contador++
-			if(Contador==6){
-				Contador=0
-				NumeroDeSemana++
-			}
-		}
-		
-		//Guarda en el objeto persona la semana
-		Persona.Semana = Semana
-
-		Persona.Errores=Errores
-	}
-
-	RellenarMinutosSemanales(PlanillaTrabajadores)
-}
-
-function RellenarMinutosSemanales(PlanillaTrabajadores) {
-	console.log(PlanillaTrabajadores);
-	let html = ""
-	
-	for(let Nombre in PlanillaTrabajadores){
-		let Persona = PlanillaTrabajadores[Nombre]
-		
-		for(let IndexMinutos in Persona.Semana){
-			Persona.Semana[IndexMinutos]=convertirMinutosAHorasYMinutos(Persona.Semana[IndexMinutos])
-		}
-		
-		html += `
-			<div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
-				<h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
-				${
-					Persona.Errores.length > 0
-						? Persona.Errores.map(
-								(element) =>
-									`<p class="text-red-600 mb-4">${element}</p>`
-						).join("")
-						: `<p class="text-gray-600 mb-4">Fichaje correcto</p>`
-				}
-				${
-					Persona.Semana.map((semana) =>
-						`<p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm" >En la semana ${Persona.Semana.indexOf(semana)+1} ficho <span class="text-white-700"> ${semana.horas} horas | Minutos: ${semana.minutos}</span></p>`
-					)
-				}
-			</div>
-		`
-	}
-	document.getElementById("TarjetaInfo").innerHTML = html
-
-	// convertirMinutosAHorasYMinutos()
-	function convertirMinutosAHorasYMinutos(minutos) {
-		var horas = Math.floor(minutos / 60)
-		var minutosRestantes = minutos % 60
-		return { horas: horas, minutos: minutosRestantes }
-	}
-
-}
-
-//#endregion
+    if (!PlanillaTrabajadores) {
+        alert("El archivo no tiene fichajes");
+        return;
+    }
+    mostrarResumenEnTarjetas(PlanillaTrabajadores);
+});
 
 document.getElementById("bg-change").addEventListener("click", () => {
 	const img = document.createElement("img")
@@ -427,3 +309,120 @@ document.getElementById("bg-change").addEventListener("click", () => {
 		imagen_bg.classList.add("hidden")
 	}
 })
+
+function calcularTotalSemanal(DatosAgrupadosPorNombre) {
+    const hoy = new Date();
+    const inicioDeSemana = new Date(hoy);
+    inicioDeSemana.setDate(hoy.getDate() - hoy.getDay()); // Domingo
+    
+    let totalMinutosSemana = 0;
+    let resumenSemanal = [];
+
+    for (let Nombre in DatosAgrupadosPorNombre) {
+        let Persona = DatosAgrupadosPorNombre[Nombre];
+        let minutosPersona = 0;
+
+        for (let Fecha in Persona) {
+            if (Fecha === 'TotalHoras' || Fecha === 'TotalMinutos') continue;
+            
+            const fechaRegistro = new Date(Fecha);
+            if (fechaRegistro >= inicioDeSemana && fechaRegistro <= hoy) {
+                minutosPersona += Persona[Fecha].MinutosTrabajados;
+            }
+        }
+
+        if (minutosPersona > 0) {
+            resumenSemanal.push({
+                Nombre: Nombre,
+                horas: Math.floor(minutosPersona / 60),
+                minutos: Math.round(minutosPersona % 60)
+            });
+            totalMinutosSemana += minutosPersona;
+        }
+    }
+
+    return {
+        resumen: resumenSemanal,
+        total: {
+            horas: Math.floor(totalMinutosSemana / 60),
+            minutos: Math.round(totalMinutosSemana % 60)
+        }
+    };
+}
+
+function calcularTotalMensual(DatosAgrupadosPorNombre) {
+    const hoy = new Date();
+    const inicioDeMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    
+    let totalMinutosMes = 0;
+    let resumenMensual = [];
+
+    for (let Nombre in DatosAgrupadosPorNombre) {
+        let Persona = DatosAgrupadosPorNombre[Nombre];
+        let minutosPersona = 0;
+
+        for (let Fecha in Persona) {
+            if (Fecha === 'TotalHoras' || Fecha === 'TotalMinutos') continue;
+            
+            const fechaRegistro = new Date(Fecha);
+            if (fechaRegistro >= inicioDeMes && fechaRegistro <= hoy) {
+                minutosPersona += Persona[Fecha].MinutosTrabajados;
+            }
+        }
+
+        if (minutosPersona > 0) {
+            resumenMensual.push({
+                Nombre: Nombre,
+                horas: Math.floor(minutosPersona / 60),
+                minutos: Math.round(minutosPersona % 60)
+            });
+            totalMinutosMes += minutosPersona;
+        }
+    }
+
+    return {
+        resumen: resumenMensual,
+        total: {
+            horas: Math.floor(totalMinutosMes / 60),
+            minutos: Math.round(totalMinutosMes % 60)
+        }
+    };
+}
+
+// Agregar event listeners para los botones
+document.addEventListener('DOMContentLoaded', function() {
+    const btnSemanal = document.getElementById('btnSemanal');
+    const btnMensual = document.getElementById('btnMensual');
+    
+    if (btnSemanal) {
+        btnSemanal.addEventListener('click', function() {
+            const resumenSemanal = calcularTotalSemanal(PlanillaTrabajadores);
+            mostrarResumen(resumenSemanal, 'Resumen Semanal');
+        });
+    }
+    
+    if (btnMensual) {
+        btnMensual.addEventListener('click', function() {
+            const resumenMensual = calcularTotalMensual(PlanillaTrabajadores);
+            mostrarResumen(resumenMensual, 'Resumen Mensual');
+        });
+    }
+});
+
+function mostrarResumen(datos, titulo) {
+    // Asumiendo que tienes un elemento para mostrar los resultados
+    const contenedor = document.getElementById('resultados');
+    if (!contenedor) return;
+
+    let html = `<h2>${titulo}</h2>`;
+    html += '<ul>';
+    
+    datos.resumen.forEach(persona => {
+        html += `<li>${persona.Nombre}: ${persona.horas}h ${persona.minutos}m</li>`;
+    });
+    
+    html += '</ul>';
+    html += `<p>Total: ${datos.total.horas}h ${datos.total.minutos}m</p>`;
+    
+    contenedor.innerHTML = html;
+}
