@@ -230,43 +230,90 @@ function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
 
     for (let Nombre in DatosAgrupadosPorNombre) {
         let Persona = DatosAgrupadosPorNombre[Nombre];
-        let diasConFaltaFichada = [];
+        let diasRegistrados = {};
         let totalMinutos = 0;
 
+        // Procesar todos los días del empleado
         for (let Fecha in Persona) {
             if (Fecha === 'TotalHoras' || Fecha === 'TotalMinutos') continue;
             
             const registros = Persona[Fecha].registros;
-            if (registros.length % 2 !== 0) {
-                diasConFaltaFichada.push(Fecha);
-            }
+            diasRegistrados[Fecha] = {
+                esCorrecto: registros.length % 2 === 0,
+                minutos: Persona[Fecha].MinutosTrabajados
+            };
             totalMinutos += Persona[Fecha].MinutosTrabajados;
         }
 
         const horasTotales = Math.floor(totalMinutos / 60);
         const minutosTotales = Math.round(totalMinutos % 60);
 
+        // Generar calendario
+        const calendario = generarCalendario(diasRegistrados);
+
         html += `
-            <div class="bg-white rounded-lg shadow-xl py-6 px-2 sm:w-1/6 w-5/12">
+            <div class="bg-white rounded-lg shadow-xl py-6 px-4 sm:w-1/4 w-11/12">
                 <h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
-                <p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm mb-2">
+                <p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm mb-4">
                     Total: ${horasTotales}h ${minutosTotales}m
                 </p>
-                ${
-                    diasConFaltaFichada.length > 0
-                        ? `<div class="mt-2">
-                            <p class="text-red-600 font-semibold">Días con fichadas faltantes:</p>
-                            ${diasConFaltaFichada.map(fecha => 
-                                `<p class="text-red-600">${formatearFecha(fecha)}</p>`
-                            ).join('')}
-                           </div>`
-                        : '<p class="text-green-600 mt-2">Todos los fichajes completos</p>'
-                }
+                <div class="calendario grid grid-cols-7 gap-1 text-center">
+                    <div class="font-bold">Do</div>
+                    <div class="font-bold">Lu</div>
+                    <div class="font-bold">Ma</div>
+                    <div class="font-bold">Mi</div>
+                    <div class="font-bold">Ju</div>
+                    <div class="font-bold">Vi</div>
+                    <div class="font-bold">Sa</div>
+                    ${calendario}
+                </div>
             </div>
         `;
     }
 
     contenedor.innerHTML = html;
+}
+
+function generarCalendario(diasRegistrados) {
+    const hoy = new Date();
+    const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const ultimoDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    
+    let html = '';
+    
+    // Agregar espacios vacíos para los días antes del primer día del mes
+    for (let i = 0; i < primerDiaDelMes.getDay(); i++) {
+        html += '<div class="p-2"></div>';
+    }
+
+    // Generar los días del mes
+    for (let dia = 1; dia <= ultimoDiaDelMes.getDate(); dia++) {
+        const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        const diaRegistrado = diasRegistrados[fecha];
+        
+        let claseColor = 'bg-gray-100'; // Día sin registro
+        let horasMinutos = '';
+        
+        if (diaRegistrado) {
+            const horas = Math.floor(diaRegistrado.minutos / 60);
+            const minutos = Math.round(diaRegistrado.minutos % 60);
+            horasMinutos = `${horas}h ${minutos}m`;
+            claseColor = diaRegistrado.esCorrecto ? 'bg-green-100 hover:bg-green-200' : 'bg-red-100 hover:bg-red-200';
+        }
+
+        html += `
+            <div class="${claseColor} p-2 rounded text-xs relative group cursor-pointer">
+                ${dia}
+                ${diaRegistrado ? `
+                    <div class="hidden group-hover:block absolute z-10 bg-white border border-gray-200 rounded p-2 shadow-lg -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                        ${horasMinutos}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    return html;
 }
 
 function formatearFecha(fecha) {
