@@ -304,22 +304,25 @@ function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
 
 function generarCalendario(diasRegistrados, nombre) {
     const hoy = new Date();
-    const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const ultimoDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    // Configurar el rango de fechas
+    const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 24); // 24 del mes anterior
+    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0); // Último día del mes actual
     
     let html = '';
     
-    // Agregar espacios vacíos para los días antes del primer día del mes
-    for (let i = 0; i < primerDiaDelMes.getDay(); i++) {
+    // Agregar espacios vacíos para alinear con el día de la semana correcto
+    const primerDia = mesAnterior.getDay(); // Obtener el día de la semana del 24 del mes anterior
+    for (let i = 0; i < primerDia; i++) {
         html += '<div class="p-2"></div>';
     }
-
-    // Generar los días del mes
-    for (let dia = 1; dia <= ultimoDiaDelMes.getDate(); dia++) {
-        const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-        const diaRegistrado = diasRegistrados[fecha];
+    
+    // Agregar los días del mes anterior desde el 24
+    const primerDiaMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    for (let fecha = new Date(mesAnterior); fecha < primerDiaMesActual; fecha.setDate(fecha.getDate() + 1)) {
+        const fechaStr = fecha.toISOString().slice(0, 10);
+        const diaRegistrado = diasRegistrados[fechaStr];
         
-        let claseColor = 'bg-gray-100'; // Día sin registro
+        let claseColor = 'bg-gray-100';
         let horasMinutos = '';
         let estadoDia = '';
         
@@ -348,7 +351,51 @@ function generarCalendario(diasRegistrados, nombre) {
 
         html += `
             <div class="${claseColor} p-2 rounded text-xs relative group cursor-pointer">
-                ${dia}
+                ${fecha.getDate()}
+                ${diaRegistrado ? `
+                    <div class="hidden group-hover:block absolute z-10 bg-white border border-gray-200 rounded p-2 shadow-lg -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                        ${horasMinutos}<br>
+                        <span class="text-xs">${estadoDia}</span>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    // Generar los días del mes actual
+    for (let fecha = new Date(primerDiaMesActual); fecha <= finMes; fecha.setDate(fecha.getDate() + 1)) {
+        const fechaStr = fecha.toISOString().slice(0, 10);
+        const diaRegistrado = diasRegistrados[fechaStr];
+        
+        let claseColor = 'bg-gray-100';
+        let horasMinutos = '';
+        let estadoDia = '';
+        
+        if (diaRegistrado) {
+            const horas = Math.floor(diaRegistrado.minutos / 60);
+            const minutos = Math.round(diaRegistrado.minutos % 60);
+            horasMinutos = `${horas}h ${minutos}m`;
+
+            if (nombre === "Juan Cruz Espasandin") {
+                claseColor = 'bg-green-100 hover:bg-green-200';
+                estadoDia = 'Jornada completa';
+            } else {
+                if (!diaRegistrado.esCorrecto) {
+                    claseColor = 'bg-red-100 hover:bg-red-200';
+                    estadoDia = 'Fichadas incompletas';
+                } else if (diaRegistrado.minutos < 480) {
+                    claseColor = 'bg-orange-100 hover:bg-orange-200';
+                    estadoDia = 'Menos de 8 horas';
+                } else {
+                    claseColor = 'bg-green-100 hover:bg-green-200';
+                    estadoDia = 'Jornada completa';
+                }
+            }
+        }
+
+        html += `
+            <div class="${claseColor} p-2 rounded text-xs relative group cursor-pointer">
+                ${fecha.getDate()}
                 ${diaRegistrado ? `
                     <div class="hidden group-hover:block absolute z-10 bg-white border border-gray-200 rounded p-2 shadow-lg -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
                         ${horasMinutos}<br>
