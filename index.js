@@ -232,6 +232,8 @@ function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
         let Persona = DatosAgrupadosPorNombre[Nombre];
         let diasRegistrados = {};
         let totalMinutos = 0;
+        let diasIncompletos = [];
+        let cantidadFichajesIncompletos = 0;
 
         // Procesar todos los días del empleado
         for (let Fecha in Persona) {
@@ -242,30 +244,56 @@ function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
                 esCorrecto: registros.length % 2 === 0,
                 minutos: Persona[Fecha].MinutosTrabajados
             };
+
+            // No contar fichajes incompletos para Juan Cruz Espasandin
+            if (Nombre !== "Juan Cruz Espasandin" && registros.length % 2 !== 0) {
+                diasIncompletos.push(formatearFecha(Fecha));
+                cantidadFichajesIncompletos++;
+            }
+
             totalMinutos += Persona[Fecha].MinutosTrabajados;
         }
 
         const horasTotales = Math.floor(totalMinutos / 60);
         const minutosTotales = Math.round(totalMinutos % 60);
 
+        // Determinar qué imagen mostrar y su clase CSS
+        let imagenClase = '';
+        if (Nombre === "Juan Cruz Espasandin" || cantidadFichajesIncompletos === 0) {
+            imagenClase = 'bg-bien';
+        } else if (cantidadFichajesIncompletos === 1) {
+            imagenClase = 'bg-maso';
+        } else {
+            imagenClase = 'bg-mal';
+        }
+
         // Generar calendario
-        const calendario = generarCalendario(diasRegistrados);
+        const calendario = generarCalendario(diasRegistrados, Nombre);
 
         html += `
-            <div class="bg-white rounded-lg shadow-xl py-6 px-4 sm:w-1/4 w-11/12">
-                <h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
-                <p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm mb-4">
-                    Total: ${horasTotales}h ${minutosTotales}m
-                </p>
-                <div class="calendario grid grid-cols-7 gap-1 text-center">
-                    <div class="font-bold">Do</div>
-                    <div class="font-bold">Lu</div>
-                    <div class="font-bold">Ma</div>
-                    <div class="font-bold">Mi</div>
-                    <div class="font-bold">Ju</div>
-                    <div class="font-bold">Vi</div>
-                    <div class="font-bold">Sa</div>
-                    ${calendario}
+            <div class="bg-white rounded-lg shadow-xl py-6 px-4 sm:w-1/4 w-11/12 relative">
+                <div class="${imagenClase} absolute top-2 right-2 w-16 h-16 opacity-80"></div>
+                <div class="relative z-10">
+                    <h2 class="text-indigo-800 text-lg font-bold mb-2">${Nombre}</h2>
+                    <p class="bg-gradient-to-l from-indigo-700 to-indigo-800 text-white py-1 px-2 rounded-lg inline-block text-sm mb-4">
+                        Total: ${horasTotales}h ${minutosTotales}m
+                    </p>
+                    ${diasIncompletos.length > 0 ? `
+                        <div class="mb-4">
+                            <p class="text-red-600 font-semibold">Días con fichadas incompletas:</p>
+                            ${diasIncompletos.map(fecha => `<p class="text-red-600">${fecha}</p>`).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="calendario grid grid-cols-7 gap-1 text-center">
+                        <div class="font-bold">Do</div>
+                        <div class="font-bold">Lu</div>
+                        <div class="font-bold">Ma</div>
+                        <div class="font-bold">Mi</div>
+                        <div class="font-bold">Ju</div>
+                        <div class="font-bold">Vi</div>
+                        <div class="font-bold">Sa</div>
+                        ${calendario}
+                    </div>
                 </div>
             </div>
         `;
@@ -274,7 +302,7 @@ function mostrarResumenEnTarjetas(DatosAgrupadosPorNombre) {
     contenedor.innerHTML = html;
 }
 
-function generarCalendario(diasRegistrados) {
+function generarCalendario(diasRegistrados, nombre) {
     const hoy = new Date();
     const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const ultimoDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
@@ -293,12 +321,29 @@ function generarCalendario(diasRegistrados) {
         
         let claseColor = 'bg-gray-100'; // Día sin registro
         let horasMinutos = '';
+        let estadoDia = '';
         
         if (diaRegistrado) {
             const horas = Math.floor(diaRegistrado.minutos / 60);
             const minutos = Math.round(diaRegistrado.minutos % 60);
             horasMinutos = `${horas}h ${minutos}m`;
-            claseColor = diaRegistrado.esCorrecto ? 'bg-green-100 hover:bg-green-200' : 'bg-red-100 hover:bg-red-200';
+
+            // Condición especial para Juan Cruz Espasandin
+            if (nombre === "Juan Cruz Espasandin") {
+                claseColor = 'bg-green-100 hover:bg-green-200';
+                estadoDia = 'Jornada completa';
+            } else {
+                if (!diaRegistrado.esCorrecto) {
+                    claseColor = 'bg-red-100 hover:bg-red-200';
+                    estadoDia = 'Fichadas incompletas';
+                } else if (diaRegistrado.minutos < 480) {
+                    claseColor = 'bg-orange-100 hover:bg-orange-200';
+                    estadoDia = 'Menos de 8 horas';
+                } else {
+                    claseColor = 'bg-green-100 hover:bg-green-200';
+                    estadoDia = 'Jornada completa';
+                }
+            }
         }
 
         html += `
@@ -306,7 +351,8 @@ function generarCalendario(diasRegistrados) {
                 ${dia}
                 ${diaRegistrado ? `
                     <div class="hidden group-hover:block absolute z-10 bg-white border border-gray-200 rounded p-2 shadow-lg -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-                        ${horasMinutos}
+                        ${horasMinutos}<br>
+                        <span class="text-xs">${estadoDia}</span>
                     </div>
                 ` : ''}
             </div>
